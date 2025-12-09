@@ -1,0 +1,132 @@
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --log.level=INFO
+      - --api.dashboard=true
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/acme/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./config/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./data/acme:/acme
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - web
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: authentik-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${AUTHENTIK_DB_PASS}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - web
+
+  redis:
+    image: redis:7-alpine
+    container_name: authentik-redis
+    restart: unless-stopped
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - web
+
+  authentik:
+    image: ghcr.io/goauthentik/server:latest
+    container_name: authentik
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      DATABASE_URL: postgresql://authentik:${AUTHENTIK_DB_PASS}@postgres:5432/authentik
+      REDIS_URL: redis://redis:6379/0
+      SERVER_HOSTNAME: auth.${DOMAIN}
+    volumes:
+      - ./data/authentik:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=Host(`auth.${DOMAIN}`)"
+      - "traefik.http.routers.auth.entrypoints=websecure"
+      - "traefik.http.routers.auth.tls=true"
+      - "traefik.http.routers.auth.tls.certresolver=le"
+    networks:
+      - web
+
+  ak-outpost-traefik:
+    image: ghcr.io/goauthentik/outpost-traefik:latest
+    container_name: ak-outpost-traefik
+    restart: unless-stopped
+    environment:
+      AUTHENTIK_HOST: http://auth.${DOMAIN}
+      AUTHENTIK_TOKEN: ${AUTHENTIK_OUTPOST_TOKEN}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ak-outpost.rule=Host(`outpost.${DOMAIN}`)"
+      - "traefik.http.routers.ak-outpost.entrypoints=websecure"
+      - "traefik.http.routers.ak-outpost.tls=true"
+      - "traefik.http.routers.ak-outpost.tls.certresolver=le"
+    networks:
+      - web
+
+  vaultwarden:
+    image: vaultwarden/server:1.29.0
+    container_name: vaultwarden
+    restart: unless-stopped
+    volumes:
+      - ./data/vaultwarden:/data
+    environment:
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+      - WEBSOCKET_ENABLED=true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vaultwarden.rule=Host(`vault.${DOMAIN}`)"
+      - "traefik.http.routers.vaultwarden.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden.tls=true"
+      - "traefik.http.routers.vaultwarden.tls.certresolver=le"
+      - "traefik.http.routers.vaultwarden.middlewares=authentik-forwardauth@file"
+    networks:
+      - web
+
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    container_name: semaphore
+    restart: unless-stopped
+    volumes:
+      - ./data/semaphore:/etc/semaphore
+    environment:
+      SEMAPHORE_DB_DIALECT: bolt
+      SEMAPHORE_ADMIN: admin
+      SEMAPHORE_ADMIN_NAME: Admin
+      SEMAPHORE_ADMIN_EMAIL: admin@${DOMAIN}
+      SEMAPHORE_ADMIN_PASSWORD: ${SEMAPHORE_ADMIN_PASSWORD}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.semaphore.rule=Host(`semaphore.${DOMAIN}`)"
+      - "traefik.http.routers.semaphore.entrypoints=websecure"
+      - "traefik.http.routers.semaphore.tls=true"
+      - "traefik.http.routers.semaphore.tls.certresolver=le"
+      - "traefik.http.routers.semaphore.middlewares=authentik-forwardauth@file"
+    networks:
+      - web
+
+networks:
+  web:
+    external: false
