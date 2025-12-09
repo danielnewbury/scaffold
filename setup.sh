@@ -17,8 +17,12 @@ prompt() {
   echo "$val"
 }
 
-mkdir -p nodes/edge-sec-cloud/config
-mkdir -p nodes/edge-sec-cloud/data/{postgres,redis,authentik,vaultwarden,semaphore,acme}
+# -----------------------------
+# Create directories
+# -----------------------------
+BASE_DIR=$(pwd)/nodes/edge-sec-cloud
+mkdir -p $BASE_DIR/config
+mkdir -p $BASE_DIR/data/{postgres,redis,authentik,vaultwarden,semaphore,acme}
 
 # -----------------------------
 # Collect user input
@@ -38,7 +42,7 @@ VAULTWARDEN_ADMIN_TOKEN=$(gen_secret)
 # -----------------------------
 # Write .env
 # -----------------------------
-cat > nodes/edge-sec-cloud/.env <<EOF
+cat > $BASE_DIR/.env <<EOF
 DOMAIN=${DOMAIN}
 LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
 
@@ -55,7 +59,7 @@ echo "[+] .env file created"
 # -----------------------------
 # Traefik static config
 # -----------------------------
-cat > nodes/edge-sec-cloud/config/traefik.yml <<EOF
+cat > $BASE_DIR/config/traefik.yml <<EOF
 log:
   level: INFO
   format: common
@@ -91,12 +95,12 @@ echo "[+] Traefik static config created"
 # -----------------------------
 # Traefik dynamic config
 # -----------------------------
-cat > nodes/edge-sec-cloud/config/dynamic.yml <<EOF
+cat > $BASE_DIR/config/dynamic.yml <<EOF
 http:
   middlewares:
     authentik-forwardauth:
       forwardAuth:
-        address: "http://ak-outpost-traefik:9000/akprox/auth/traefik"
+        address: "http://ak-outpost:9000/outpost.goauthentik.io/auth/traefik"
         trustForwardHeader: true
         authResponseHeaders:
           - "Set-Cookie"
@@ -118,8 +122,7 @@ echo "[+] Traefik dynamic config created"
 # -----------------------------
 # Docker Compose file
 # -----------------------------
-cat > nodes/edge-sec-cloud/docker-compose.yml <<'EOF'
-version: "3.8"
+cat > $BASE_DIR/docker-compose.yml <<'EOF'
 services:
   traefik:
     image: traefik:latest
@@ -192,9 +195,9 @@ services:
     networks:
       - web
 
-  ak-outpost-traefik:
-    image: ghcr.io/goauthentik/outpost-traefik:latest
-    container_name: ak-outpost-traefik
+  ak-outpost:
+    image: ghcr.io/goauthentik/proxy:latest
+    container_name: ak-outpost
     restart: unless-stopped
     environment:
       AUTHENTIK_HOST: http://auth.${DOMAIN}
@@ -256,13 +259,20 @@ EOF
 
 echo "[+] docker-compose.yml created"
 
+# -----------------------------
+# Fix permissions for Semaphore to prevent restart loop
+# -----------------------------
+chmod -R 700 $BASE_DIR/data/semaphore
+chown -R 1000:1000 $BASE_DIR/data/semaphore
+echo "[+] Semaphore volume permissions set"
+
 echo ""
 echo "=============================================="
 echo "[+] Bootstrap complete!"
 echo "[+] Next steps:"
-echo "    1. SSH into your edge VM"
-echo "    2. cd nodes/edge-sec-cloud"
-echo "    3. Run: docker compose up -d"
+echo "    1. cd $BASE_DIR"
+echo "    2. docker compose pull"
+echo "    3. docker compose up -d"
 echo "    4. Visit https://auth.${DOMAIN} to finish Authentik setup"
 echo "    5. Visit https://semaphore.${DOMAIN} — protected by Authentik SSO"
 echo "    6. Visit https://vault.${DOMAIN} to access Vaultwarden"
