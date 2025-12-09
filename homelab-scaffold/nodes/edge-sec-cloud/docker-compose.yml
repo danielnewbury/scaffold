@@ -1,0 +1,40 @@
+version: "3.8"
+services:
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
+    restart: unless-stopped
+    networks: ["web"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./config/acme:/acme
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "traefik.enable=true"
+
+  authentik:
+    image: authentik/authentik
+    container_name: authentik
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_URL=postgresql://authentik:changeme@postgres/authentik
+    depends_on: []
+    labels:
+      - "traefik.enable=true"
+
+  tailscale:
+    image: tailscale/tailscale
+    container_name: tailscale
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - ./config/tailscale:/var/lib/tailscale
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTHKEY:-}
+    command: tailscaled

@@ -1,0 +1,40 @@
+version: "3.8"
+services:
+  forgejo:
+    image: forgejo/gitea:1.19
+    container_name: forgejo
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    labels:
+      - "traefik.enable=true"
+
+  semaphore:
+    image: semaphoreci/semaphore:latest
+    container_name: semaphore
+    restart: unless-stopped
+    volumes:
+      - ./data:/var/lib/semaphore
+    labels:
+      - "traefik.enable=true"
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
+    labels:
+      - "traefik.enable=true"
+
+  promtail:
+    image: grafana/promtail:2.9.1
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./config/promtail.yaml:/etc/promtail/promtail.yaml:ro

@@ -1,0 +1,38 @@
+version: "3.8"
+services:
+  vaultwarden:
+    image: vaultwarden/server:1.29.0
+    container_name: vaultwarden
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      - ADMIN_TOKEN=changeme
+    labels:
+      - "traefik.enable=true"
+
+  homeassistant:
+    image: homeassistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+    labels:
+      - "traefik.enable=false"
+
+  tandoor:
+    image: akshaynagpal/tandoor-recipes:latest
+    container_name: tandoor
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    labels:
+      - "traefik.enable=true"
+
+  promtail:
+    image: grafana/promtail:2.9.1
+    container_name: promtail_personal
+    restart: unless-stopped
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./config/promtail.yaml:/etc/promtail/promtail.yaml:ro

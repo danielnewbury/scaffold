@@ -1,0 +1,58 @@
+version: "3.8"
+services:
+  plex:
+    image: linuxserver/plex:latest
+    container_name: plex
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+      - ./media:/media
+    labels:
+      - "traefik.enable=false"
+
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+      - ./tv:/tv
+    labels:
+      - "traefik.enable=true"
+
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+      - ./movies:/movies
+    labels:
+      - "traefik.enable=true"
+
+  prowlarr:
+    image: prowlarr/prowlarr:develop
+    container_name: prowlarr
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+    labels:
+      - "traefik.enable=true"
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+      - ./downloads:/downloads
+    labels:
+      - "traefik.enable=false"
+
+  promtail:
+    image: grafana/promtail:2.9.1
+    container_name: promtail_media
+    restart: unless-stopped
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./config/promtail.yaml:/etc/promtail/promtail.yaml:ro
